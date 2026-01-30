@@ -39,10 +39,7 @@ class SaveDAGRequest(BaseModel):
 
 @router.post("/generate_dag")
 async def generate_dag(input: dict) -> Dict[str, Any]:
-    """Generate Airflow DAG code from transformations.
-    
-    Matches original endpoint: POST /Transformation/generate_dag
-    """
+    """Generate Airflow DAG code from transformations."""
     try:
         from dsat.common import DAGGenerator
         
@@ -80,18 +77,19 @@ async def generate_dag(input: dict) -> Dict[str, Any]:
 
 @router.post("/save_dag")
 def save_dag(request: SaveDAGRequest) -> Dict[str, Any]:
-    """Save DAG to file system and trigger it.
+    """Save DAG to Airflow dags folder and trigger it.
     
-    Matches original endpoint: POST /Transformation/save_dag
+    This saves the DAG file, waits for Airflow to detect it,
+    and triggers the DAG execution.
     """
     try:
+        from dsat.common.dag_trigger import wait_for_dag_and_trigger
+        
         dag_name = request.dag_name
         dag_code = request.dag_code
         
-        # Save DAG file (adjust path for your environment)
-        # On GCP VM: /home/airflow/dags/
-        # Locally: ./dags/
-        dag_dir = os.environ.get("DAG_FOLDER", "./dags")
+        # Save DAG file to Airflow's dags directory
+        dag_dir = os.environ.get("DAG_FOLDER", "/home/airflow/dags")
         os.makedirs(dag_dir, exist_ok=True)
         
         file_path = os.path.join(dag_dir, f"{dag_name}.py")
@@ -100,13 +98,27 @@ def save_dag(request: SaveDAGRequest) -> Dict[str, Any]:
         
         logger.info(f"DAG saved at {file_path}")
         
+        # Wait for Airflow to detect and trigger the DAG
+        triggered = wait_for_dag_and_trigger(dag_name)
+        
+        if not triggered:
+            logger.warning(f"Failed to trigger DAG {dag_name}")
+            return {
+                "status": "partial",
+                "dag_name": dag_name,
+                "target_table_name": request.target_table_name,
+                "target_dataset": request.target_dataset,
+                "file_path": file_path,
+                "message": f"DAG saved but failed to trigger. Check Airflow manually."
+            }
+        
         return {
             "status": "success",
             "dag_name": dag_name,
             "target_table_name": request.target_table_name,
             "target_dataset": request.target_dataset,
             "file_path": file_path,
-            "message": f"DAG saved successfully at {file_path}"
+            "message": f"DAG saved and triggered successfully!"
         }
         
     except Exception as e:
@@ -147,12 +159,8 @@ async def preview_sql(input: dict) -> Dict[str, Any]:
 
 @router.post("/fe_chat_check")
 def fe_chat_check(input: str) -> Dict[str, Any]:
-    """Check if input is a valid FE technique.
-    
-    Matches original endpoint: POST /Transformation/fe_chat_check
-    """
+    """Check if input is a valid FE technique."""
     try:
-        # Simple validation without AI for now
         valid_techniques = {
             "standardization", "normalization", "log_transformation",
             "label_encoding", "frequency_encoding", "target_encoding",
