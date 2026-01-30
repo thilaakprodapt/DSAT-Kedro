@@ -1,4 +1,4 @@
-"""Feature Engineering API routes."""
+"""Feature Engineering API routes - matching original endpoints."""
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -18,16 +18,12 @@ class FERequest(BaseModel):
     target_column: Optional[str] = None
 
 
-class FERecommendation(BaseModel):
-    """A single FE recommendation."""
-    column_name: str
-    fe_method: str
-    reason: Optional[str] = None
-
-
-@router.post("/recommendations")
-async def get_recommendations(request: FERequest) -> Dict[str, Any]:
-    """Get feature engineering recommendations based on EDA."""
+@router.post("/FE_analyze")
+async def fe_analyze(request: FERequest) -> Dict[str, Any]:
+    """Run Feature Engineering analysis.
+    
+    Matches original endpoint: POST /Feature Engineering/FE_analyze
+    """
     try:
         from dsat.pipelines.eda.nodes import (
             load_data_from_bq,
@@ -71,43 +67,37 @@ async def get_recommendations(request: FERequest) -> Dict[str, Any]:
         return {
             "status": "success",
             "recommendations": recommendations,
-            "total_recommendations": len(recommendations)
+            "total_recommendations": len(recommendations),
+            "column_types": column_types,
+            "eda_summary": eda_summary
         }
         
     except Exception as e:
-        logger.error(f"Error getting FE recommendations: {e}")
+        logger.error(f"Error in FE analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/apply")
-async def apply_transformations(
-    request: FERequest,
-    transformations: List[FERecommendation]
+@router.get("/fe_result")
+async def get_fe_result(
+    project_id: str,
+    dataset_id: str,
+    table_name: str,
+    target_column: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Apply feature engineering transformations."""
-    try:
-        from dsat.common import SQLTemplateEngine
-        
-        engine = SQLTemplateEngine(
-            project_id=request.project_id,
-            dataset_id=request.dataset_id,
-            source_table=request.table_name
-        )
-        
-        # Convert to dict format
-        transform_dicts = [
-            {"column_name": t.column_name, "fe_method": t.fe_method}
-            for t in transformations
-        ]
-        
-        sql = engine.render_select_statement(transform_dicts, include_original=True)
-        
-        return {
-            "status": "success",
-            "preview_sql": sql,
-            "transformations_count": len(transformations)
-        }
-        
-    except Exception as e:
-        logger.error(f"Error applying transformations: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Get cached FE result (runs analysis if not cached).
+    
+    Matches original endpoint: GET /Feature Engineering/fe_result
+    """
+    request = FERequest(
+        project_id=project_id,
+        dataset_id=dataset_id,
+        table_name=table_name,
+        target_column=target_column
+    )
+    return await fe_analyze(request)
+
+
+@router.post("/recommendations")
+async def get_recommendations(request: FERequest) -> Dict[str, Any]:
+    """Alternative endpoint for FE recommendations."""
+    return await fe_analyze(request)
