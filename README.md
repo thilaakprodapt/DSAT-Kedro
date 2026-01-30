@@ -1,87 +1,107 @@
-# DSAT - Data Science Assistant Tool (Kedro)
+# DSAT - Data Science Assistant Tool
 
-A Kedro-based pipeline implementation of the Data Science Assistant Tool for automated ML workflows.
+A Kedro-based data science pipeline for automated EDA, feature engineering, and DAG generation.
 
-## Overview
+## 🚀 Quick Start
 
-This project provides modular, reproducible data science pipelines for:
-- **EDA (Exploratory Data Analysis)** - Automated statistical analysis with Gemini AI
-- **Feature Engineering** - AI-powered recommendations with SQL template transformations
-- **DAG Generation** - Airflow DAG generation for BigQuery transformations
-- **Data Balancing** - Handle imbalanced datasets
-- **Leakage Detection** - Identify data leakage risks
+```bash
+# Clone and install
+git clone https://github.com/thilaakprodapt/DSAT-Kedro.git
+cd DSAT-Kedro
+pip install -e .
 
-## Project Structure
+# Run API server
+python -m uvicorn dsat.api.main:app --reload --port 8001
+
+# Open Swagger: http://localhost:8001/docs
+```
+
+## 📊 Features
+
+| Feature | Description |
+|---------|-------------|
+| **EDA Pipeline** | Automated exploratory data analysis |
+| **Feature Engineering** | Smart transformation recommendations |
+| **DAG Generation** | Airflow DAG code from transformations |
+| **Leakage Detection** | Identify data leakage risks |
+| **MLFlow Tracking** | Experiment tracking for all runs |
+
+## 🛠️ Kedro Commands
+
+```bash
+# List pipelines
+kedro registry list
+
+# Run EDA pipeline
+kedro run --pipeline=eda
+
+# Visualize pipelines
+kedro viz
+
+# View MLFlow experiments
+mlflow ui --port 5000
+```
+
+## 📁 Project Structure
 
 ```
 DSAT/
-├── conf/                          # Configuration files
-│   ├── base/                      # Default configuration
-│   │   ├── catalog.yml            # Data catalog definitions
-│   │   ├── parameters.yml         # Pipeline parameters
-│   │   └── logging.yml            # Logging configuration
-│   └── local/                     # Local overrides (gitignored)
-│       └── credentials.yml        # GCP credentials
-├── src/
-│   └── dsat/
-│       ├── pipelines/             # Kedro pipelines
-│       │   ├── eda/               # EDA pipeline
-│       │   ├── feature_engineering/
-│       │   ├── dag_generation/
-│       │   ├── data_balancing/
-│       │   └── leakage_detection/
-│       └── common/                # Shared utilities
-├── tests/                         # Unit tests
-└── pyproject.toml                 # Project configuration
+├── conf/                      # Configuration
+│   ├── base/
+│   │   ├── catalog.yml       # Data catalog
+│   │   ├── parameters.yml    # Parameters
+│   │   └── mlflow.yml        # MLFlow config
+│   └── local/
+│       └── credentials.yml   # GCP credentials
+├── src/dsat/
+│   ├── api/                  # FastAPI endpoints
+│   ├── common/               # Shared utilities
+│   ├── pipelines/            # Kedro pipelines
+│   └── hooks.py              # MLFlow hooks
+└── tests/                    # Unit tests
 ```
 
-## Installation
+## 🔌 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/EDA/column_list` | GET | List table columns |
+| `/EDA/analyze` | POST | Run EDA analysis |
+| `/FeatureEngineering/recommendations` | POST | Get FE recommendations |
+| `/Transformation/generate_dag` | POST | Generate Airflow DAG |
+| `/LeakageDetection/detect` | POST | Detect data leakage |
+
+## ⚙️ Configuration
+
+Update `conf/base/parameters.yml` for your GCP project:
+
+```yaml
+gcp:
+  project_id: your-project-id
+  location: us-central1
+
+eda:
+  table_config:
+    project_id: your-project-id
+    dataset_id: your_dataset
+    table_name: your_table
+```
+
+## 🧪 Testing
 
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or: venv\Scripts\activate  # Windows
-
-# Install dependencies
-pip install -e ".[dev]"
+pytest tests/ -v
 ```
 
-## Usage
+## 📦 Dependencies
 
-### Run a specific pipeline
-```bash
-kedro run --pipeline=eda
-kedro run --pipeline=feature_engineering
-```
+- Python >= 3.10
+- Kedro >= 1.0.0
+- FastAPI >= 0.100.0
+- MLFlow >= 2.10.0
+- Google Cloud BigQuery
+- Google Cloud Storage
 
-### Run with parameters
-```bash
-kedro run --pipeline=eda --params="table_config.dataset=DS_FE_Dataset,table_config.table=Employee"
-```
+## 📝 License
 
-### Visualize pipelines
-```bash
-kedro viz
-```
-
-## Configuration
-
-### Data Catalog (`conf/base/catalog.yml`)
-Define your BigQuery tables and GCS artifacts here.
-
-### Parameters (`conf/base/parameters.yml`)
-Configure pipeline parameters like project ID, table names, etc.
-
-### Credentials (`conf/local/credentials.yml`)
-Add your GCP service account credentials (not tracked in git).
-
-## Requirements
-
-- Python 3.10+
-- Google Cloud service account with BigQuery & GCS access
-- Vertex AI API enabled
-
-## License
-
-Internal use only.
+MIT
