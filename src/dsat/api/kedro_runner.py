@@ -2,6 +2,7 @@
 
 Provides a clean interface to run Kedro pipelines from FastAPI endpoints
 with proper session management, MLFlow tracking, and data catalog support.
+Compatible with Kedro 0.18.x and 1.x.
 """
 
 import logging
@@ -27,6 +28,8 @@ def get_kedro_session(
 ):
     """Context manager for Kedro session.
     
+    Compatible with both Kedro 0.18.x and 1.x.
+    
     Args:
         pipeline_name: Optional pipeline to run
         extra_params: Optional runtime parameters
@@ -36,14 +39,22 @@ def get_kedro_session(
     """
     from kedro.framework.session import KedroSession
     from kedro.framework.startup import bootstrap_project
+    import inspect
     
     project_path = get_project_path()
     bootstrap_project(project_path)
     
-    with KedroSession.create(
-        project_path=project_path,
-        extra_params=extra_params or {}
-    ) as session:
+    # Check Kedro version by inspecting KedroSession.create signature
+    create_sig = inspect.signature(KedroSession.create)
+    params = create_sig.parameters
+    
+    # Build kwargs based on what's supported
+    create_kwargs = {"project_path": project_path}
+    
+    if "extra_params" in params:
+        create_kwargs["extra_params"] = extra_params or {}
+    
+    with KedroSession.create(**create_kwargs) as session:
         yield session
 
 
