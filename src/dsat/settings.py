@@ -1,12 +1,13 @@
-"""Project settings for Kedro 1.x with MLFlow.
+"""Project settings for Kedro 1.x.
 
 Documentation: https://docs.kedro.org/en/stable/kedro_project_setup/settings.html
 """
 
-from dsat.hooks import ProjectHooks, MLFlowHooks
+from dsat.hooks import ProjectHooks
 
 # Instantiate and list hooks
-HOOKS = (ProjectHooks(), MLFlowHooks())
+# Note: kedro-mlflow registers its own hooks automatically
+HOOKS = (ProjectHooks(),)
 
 # Disable telemetry
 TELEMETRY = False
