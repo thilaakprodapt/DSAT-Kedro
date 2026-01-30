@@ -1,10 +1,11 @@
 """DAG Generation API routes - matching original endpoints."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import logging
 import os
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,15 @@ class SaveDAGRequest(BaseModel):
     target_dataset: str
     source_table: str
     input_data: dict
+
+
+def trigger_dag_async(dag_name: str):
+    """Trigger DAG in background thread."""
+    try:
+        from dsat.common.dag_trigger import wait_for_dag_and_trigger
+        wait_for_dag_and_trigger(dag_name)
+    except Exception as e:
+        logger.error(f"Background DAG trigger failed: {e}")
 
 
 @router.post("/generate_dag")
@@ -79,17 +89,15 @@ async def generate_dag(input: dict) -> Dict[str, Any]:
 def save_dag(request: SaveDAGRequest) -> Dict[str, Any]:
     """Save DAG to Airflow dags folder and trigger it.
     
-    This saves the DAG file, waits for Airflow to detect it,
-    and triggers the DAG execution.
+    Saves the DAG file immediately and triggers Airflow in background.
     """
     try:
-        from dsat.common.dag_trigger import wait_for_dag_and_trigger
-        
         dag_name = request.dag_name
         dag_code = request.dag_code
         
         # Save DAG file to Airflow's dags directory
-        dag_dir = os.environ.get("DAG_FOLDER", "/home/airflow/dags")
+        # Use the same path as original: /home/airflow/dags/
+        dag_dir = "/home/airflow/dags"
         os.makedirs(dag_dir, exist_ok=True)
         
         file_path = os.path.join(dag_dir, f"{dag_name}.py")
@@ -97,20 +105,11 @@ def save_dag(request: SaveDAGRequest) -> Dict[str, Any]:
             f.write(dag_code)
         
         logger.info(f"DAG saved at {file_path}")
+        print(f"DAG saved at {file_path}")
         
-        # Wait for Airflow to detect and trigger the DAG
-        triggered = wait_for_dag_and_trigger(dag_name)
-        
-        if not triggered:
-            logger.warning(f"Failed to trigger DAG {dag_name}")
-            return {
-                "status": "partial",
-                "dag_name": dag_name,
-                "target_table_name": request.target_table_name,
-                "target_dataset": request.target_dataset,
-                "file_path": file_path,
-                "message": f"DAG saved but failed to trigger. Check Airflow manually."
-            }
+        # Trigger DAG in background (non-blocking)
+        thread = threading.Thread(target=trigger_dag_async, args=(dag_name,))
+        thread.start()
         
         return {
             "status": "success",
@@ -118,7 +117,7 @@ def save_dag(request: SaveDAGRequest) -> Dict[str, Any]:
             "target_table_name": request.target_table_name,
             "target_dataset": request.target_dataset,
             "file_path": file_path,
-            "message": f"DAG saved and triggered successfully!"
+            "message": f"DAG saved at {file_path}. Airflow trigger started in background."
         }
         
     except Exception as e:
@@ -177,20 +176,15 @@ def fe_chat_check(input: str) -> Dict[str, Any]:
         suggestion = ""
         if not is_valid:
             if "encod" in input_lower:
-                suggestion = "Try: one-hot encoding, label encoding, target encoding, ordinal encoding, frequency encoding"
+                suggestion = "Try: one-hot encoding, label encoding, target encoding"
             elif "scal" in input_lower:
-                suggestion = "Try: standardization, min-max scaling, robust scaling, normalization"
-            elif "transform" in input_lower:
-                suggestion = "Try: log transformation, standardization, normalization"
+                suggestion = "Try: standardization, min-max scaling, robust scaling"
             elif "imput" in input_lower or "missing" in input_lower:
-                suggestion = "Try: mean_imputation, median_imputation, mode_imputation"
+                suggestion = "Try: impute_mean, impute_median, impute_mode"
             else:
-                suggestion = "Check that the input is a valid ML feature engineering technique"
+                suggestion = "Check that input is a valid ML feature engineering technique"
         
-        return {
-            "valid": is_valid,
-            "suggestion": suggestion
-        }
+        return {"valid": is_valid, "suggestion": suggestion}
         
     except Exception as e:
         logger.error(f"Error in fe_chat_check: {e}")
@@ -203,19 +197,9 @@ async def available_transformations() -> Dict[str, Any]:
     return {
         "status": "success",
         "categories": {
-            "numerical": [
-                "standardization", "normalization", "log_transformation",
-                "sqrt_transformation", "binning", "robust_scaling"
-            ],
-            "categorical": [
-                "label_encoding", "frequency_encoding", "target_encoding"
-            ],
-            "missing_values": [
-                "impute_mean", "impute_median", "impute_mode",
-                "impute_constant", "missing_indicator"
-            ],
-            "outliers": [
-                "clip_outliers", "clip_iqr", "winsorize"
-            ]
+            "numerical": ["standardization", "normalization", "log_transformation", "binning"],
+            "categorical": ["label_encoding", "frequency_encoding", "target_encoding"],
+            "missing_values": ["impute_mean", "impute_median", "impute_mode"],
+            "outliers": ["clip_outliers", "clip_iqr", "winsorize"]
         }
     }
