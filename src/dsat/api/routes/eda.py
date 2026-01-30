@@ -162,10 +162,17 @@ async def list_pipelines() -> Dict[str, Any]:
         
         pipelines = get_pipelines()
         
+        # Handle both list and dict return types
+        if isinstance(pipelines, dict):
+            pipeline_names = list(pipelines.keys())
+        else:
+            pipeline_names = pipelines
+        
         return {
             "status": "success",
-            "pipelines": list(pipelines.keys())
+            "pipelines": pipeline_names
         }
     except Exception as e:
         logger.error(f"Error listing pipelines: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+

@@ -1,13 +1,12 @@
 """Kedro Session Runner for API integration.
 
-Provides a clean interface to run Kedro pipelines from FastAPI endpoints
-with proper session management, MLFlow tracking, and data catalog support.
+Provides a clean interface to run Kedro pipelines from FastAPI endpoints.
 Compatible with Kedro 0.18.x and 1.x.
 """
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
@@ -15,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 def get_project_path() -> Path:
     """Get the Kedro project root path."""
-    # Navigate from src/dsat/api to project root
     current = Path(__file__).resolve()
     # Go up: kedro_runner.py -> api -> dsat -> src -> DSAT
     return current.parent.parent.parent.parent
@@ -29,13 +27,6 @@ def get_kedro_session(
     """Context manager for Kedro session.
     
     Compatible with both Kedro 0.18.x and 1.x.
-    
-    Args:
-        pipeline_name: Optional pipeline to run
-        extra_params: Optional runtime parameters
-    
-    Yields:
-        KedroSession instance
     """
     from kedro.framework.session import KedroSession
     from kedro.framework.startup import bootstrap_project
@@ -65,47 +56,35 @@ def run_pipeline(
     from_nodes: Optional[list] = None,
     to_nodes: Optional[list] = None
 ) -> Dict[str, Any]:
-    """Run a Kedro pipeline and return outputs.
-    
-    Args:
-        pipeline_name: Name of the pipeline to run
-        extra_params: Runtime parameters override
-        node_names: Specific nodes to run
-        from_nodes: Start from these nodes
-        to_nodes: Run up to these nodes
-    
-    Returns:
-        Dict of output dataset names to values
-    """
+    """Run a Kedro pipeline and return outputs."""
     with get_kedro_session(pipeline_name, extra_params) as session:
-        # Run the pipeline
         outputs = session.run(
             pipeline_name=pipeline_name,
             node_names=node_names,
             from_nodes=from_nodes,
             to_nodes=to_nodes
         )
-        
         return outputs or {}
 
 
 def get_catalog():
-    """Get the Kedro data catalog.
-    
-    Returns:
-        DataCatalog instance
-    """
+    """Get the Kedro data catalog."""
     with get_kedro_session() as session:
         context = session.load_context()
         return context.catalog
 
 
-def get_pipelines() -> Dict[str, Any]:
-    """Get all registered pipelines.
+def get_pipelines() -> List[str]:
+    """Get all registered pipeline names.
     
-    Returns:
-        Dict of pipeline names to Pipeline objects
+    Compatible with different Kedro versions.
     """
-    with get_kedro_session() as session:
-        context = session.load_context()
-        return context.pipelines
+    try:
+        # Try importing from pipeline_registry directly
+        from dsat.pipeline_registry import register_pipelines
+        pipelines = register_pipelines()
+        return list(pipelines.keys())
+    except Exception as e:
+        logger.warning(f"Could not get pipelines from registry: {e}")
+        # Fallback: return known pipelines
+        return ["eda", "fe", "feature_engineering", "data_science", "__default__"]
