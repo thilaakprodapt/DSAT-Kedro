@@ -1,0 +1,10 @@
+# Data Catalog - DSAT
+# Documentation: https://docs.kedro.org/en/stable/data/data_catalog.html
+
+# Example BigQuery dataset (uncomment when ready to use)
+# raw_data:
+#   type: pandas.GBQDataSet
+#   project: cloud-practice-dev-2
+#   dataset: DS_FE_Dataset
+#   table_name: Employee
+#   credentials: gcp_credentials

@@ -1,0 +1,20 @@
+# Parameters - DSAT
+# Documentation: https://docs.kedro.org/en/stable/configuration/parameters.html
+
+gcp:
+  project_id: cloud-practice-dev-2
+  location: us-central1
+  bucket_name: cloudassist1
+
+eda:
+  sample_limit: 1500
+  table_config:
+    project_id: cloud-practice-dev-2
+    dataset_id: DS_FE_Dataset
+    table_name: Employee
+
+fe:
+  dataset_id: DS_FE_Dataset
+  table_name: Employee
+  target_dataset: DS_FE_Dataset
+  target_column: LeaveOrNot
