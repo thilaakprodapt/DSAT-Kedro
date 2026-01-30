@@ -1,0 +1,22 @@
+"""MLFlow configuration for DSAT.
+
+Configuration for kedro-mlflow integration.
+"""
+
+# MLFlow tracking settings
+server:
+  # Local MLFlow tracking server
+  mlflow_tracking_uri: mlruns
+  # Experiment name
+  experiment:
+    name: DSAT_Experiments
+
+# Run options
+run:
+  # Nested runs for pipeline stages
+  nested: true
+
+# UI settings  
+ui:
+  port: 5000
+  host: 127.0.0.1
