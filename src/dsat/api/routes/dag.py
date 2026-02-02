@@ -160,6 +160,13 @@ def save_dag(request: SaveDAGRequest) -> Dict[str, Any]:
     source_table = request.source_table
 
     try:
+        # Fix JSON booleans to Python booleans (false -> False, true -> True)
+        # This handles cases where JSON is passed directly without conversion
+        import re
+        dag_code = re.sub(r':\s*false\b', ': False', dag_code)
+        dag_code = re.sub(r':\s*true\b', ': True', dag_code)
+        dag_code = re.sub(r':\s*null\b', ': None', dag_code)
+        
         # Save DAG file - EXACT same path as original
         file_path = f"/home/airflow/dags/{dag_name}.py"
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
