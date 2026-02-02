@@ -1,25 +1,28 @@
-"""DAG Generation API routes - matching original endpoints."""
+"""DAG Generation API routes - matching original endpoints exactly."""
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+import os
+import subprocess
+import time
+import logging
+import threading
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
-import logging
-import os
-import threading
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Airflow scheduler container name (same as original)
+SCHEDULER = "airflow-scheduler-1"
+
 
 class Transformation(BaseModel):
-    """A single transformation specification."""
     column_name: str
     fe_method: str
 
 
 class DAGRequest(BaseModel):
-    """Request model for DAG generation."""
     project_id: str
     dataset_id: str
     source_table: str
@@ -29,7 +32,6 @@ class DAGRequest(BaseModel):
 
 
 class SaveDAGRequest(BaseModel):
-    """Request model for saving DAG."""
     dag_code: str
     dag_name: str
     target_table_name: str
@@ -38,14 +40,74 @@ class SaveDAGRequest(BaseModel):
     input_data: dict
 
 
-def trigger_dag_async(dag_name: str):
-    """Trigger DAG in background thread."""
-    try:
-        from dsat.common.dag_trigger import wait_for_dag_and_trigger
-        wait_for_dag_and_trigger(dag_name)
-    except Exception as e:
-        logger.error(f"Background DAG trigger failed: {e}")
+# =============================================================================
+# DAG TRIGGER HELPER FUNCTIONS (inline like original)
+# =============================================================================
 
+def run_cmd(cmd):
+    """Run shell commands and return output."""
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    return result.stdout.strip(), result.stderr.strip()
+
+
+def dag_exists(dag_id):
+    """Check if DAG exists in Airflow."""
+    out, _ = run_cmd(f"docker exec {SCHEDULER} airflow dags list")
+    return dag_id in out
+
+
+def is_dag_paused(dag_id):
+    """Check if DAG is paused."""
+    out, _ = run_cmd(f"docker exec {SCHEDULER} airflow dags list --output table")
+    for line in out.split("\n"):
+        if dag_id in line:
+            return "True" in line or "paused" in line.lower()
+    return False
+
+
+def unpause_dag(dag_id):
+    """Unpause the DAG."""
+    print(f"Unpausing DAG: {dag_id}")
+    run_cmd(f"docker exec {SCHEDULER} airflow dags unpause {dag_id}")
+
+
+def trigger_dag(dag_id):
+    """Trigger the DAG."""
+    print(f"Triggering DAG: {dag_id}")
+    run_cmd(f"docker exec {SCHEDULER} airflow dags trigger {dag_id}")
+
+
+def wait_for_dag_and_trigger(dag_id):
+    """Wait for DAG → unpause if needed → trigger."""
+    print(f"Checking for DAG '{dag_id}'...")
+
+    # Wait up to 2 minutes
+    for _ in range(40):
+        if dag_exists(dag_id):
+            print(f"✅ DAG '{dag_id}' detected in Airflow!")
+            break
+        print("DAG not found. Waiting...")
+        time.sleep(3)
+    else:
+        print("⛔ Timeout: DAG not detected.")
+        return False
+
+    # Check paused state
+    if is_dag_paused(dag_id):
+        print(f"⚠️ DAG '{dag_id}' is paused.")
+        unpause_dag(dag_id)
+    else:
+        print("✔ DAG already unpaused.")
+
+    # Trigger DAG
+    trigger_dag(dag_id)
+    print("🎉 DAG triggered successfully!")
+    return True
+
+
+# =============================================================================
+# API ENDPOINTS
+# =============================================================================
 
 @router.post("/generate_dag")
 async def generate_dag(input: dict) -> Dict[str, Any]:
@@ -89,40 +151,46 @@ async def generate_dag(input: dict) -> Dict[str, Any]:
 def save_dag(request: SaveDAGRequest) -> Dict[str, Any]:
     """Save DAG to Airflow dags folder and trigger it.
     
-    Saves the DAG file immediately and triggers Airflow in background.
+    EXACTLY like original implementation.
     """
+    dag_name = request.dag_name
+    dag_code = request.dag_code
+    target_table_name = request.target_table_name
+    target_dataset = request.target_dataset
+    source_table = request.source_table
+
     try:
-        dag_name = request.dag_name
-        dag_code = request.dag_code
-        
-        # Save DAG file to Airflow's dags directory
-        # Use the same path as original: /home/airflow/dags/
-        dag_dir = "/home/airflow/dags"
-        os.makedirs(dag_dir, exist_ok=True)
-        
-        file_path = os.path.join(dag_dir, f"{dag_name}.py")
+        # Save DAG file - EXACT same path as original
+        file_path = f"/home/airflow/dags/{dag_name}.py"
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, "w") as f:
             f.write(dag_code)
-        
-        logger.info(f"DAG saved at {file_path}")
         print(f"DAG saved at {file_path}")
-        
-        # Trigger DAG in background (non-blocking)
-        thread = threading.Thread(target=trigger_dag_async, args=(dag_name,))
-        thread.start()
-        
+
+        # Trigger DAG via Docker - EXACT same as original
+        triggered = wait_for_dag_and_trigger(dag_name)
+        if not triggered:
+            print(f"⚠️ Failed to trigger DAG {dag_name}")
+            return {
+                "status": "error",
+                "message": f"Failed to trigger DAG {dag_name}"
+            }
+
         return {
             "status": "success",
             "dag_name": dag_name,
-            "target_table_name": request.target_table_name,
-            "target_dataset": request.target_dataset,
+            "target_table_name": target_table_name,
+            "target_dataset": target_dataset,
             "file_path": file_path,
-            "message": f"DAG saved at {file_path}. Airflow trigger started in background."
+            "message": f"DAG created and triggered successfully"
         }
-        
+
     except Exception as e:
-        logger.error(f"Error saving DAG: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error during DAG save/trigger: {str(e)}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 
 @router.post("/preview_sql")
@@ -138,18 +206,12 @@ async def preview_sql(input: dict) -> Dict[str, Any]:
             target_dataset=input.get("target_dataset")
         )
         
-        transformations = input.get("transformation", [])
-        target_column = input.get("target_column")
-        
         sql = generator.preview_sql(
-            transformations=transformations,
-            target_column=target_column
+            transformations=input.get("transformation", []),
+            target_column=input.get("target_column")
         )
         
-        return {
-            "status": "success",
-            "sql": sql
-        }
+        return {"status": "success", "sql": sql}
         
     except Exception as e:
         logger.error(f"Error previewing SQL: {e}")
@@ -159,47 +221,34 @@ async def preview_sql(input: dict) -> Dict[str, Any]:
 @router.post("/fe_chat_check")
 def fe_chat_check(input: str) -> Dict[str, Any]:
     """Check if input is a valid FE technique."""
-    try:
-        valid_techniques = {
-            "standardization", "normalization", "log_transformation",
-            "label_encoding", "frequency_encoding", "target_encoding",
-            "one-hot encoding", "one_hot_encoding", "ordinal_encoding",
-            "min-max scaling", "robust_scaling", "pca", "svd",
-            "mean_imputation", "median_imputation", "mode_imputation",
-            "impute_mean", "impute_median", "impute_mode",
-            "binning", "clip_outliers", "winsorize", "smote"
-        }
-        
-        input_lower = input.lower().strip()
-        is_valid = input_lower in valid_techniques
-        
-        suggestion = ""
-        if not is_valid:
-            if "encod" in input_lower:
-                suggestion = "Try: one-hot encoding, label encoding, target encoding"
-            elif "scal" in input_lower:
-                suggestion = "Try: standardization, min-max scaling, robust scaling"
-            elif "imput" in input_lower or "missing" in input_lower:
-                suggestion = "Try: impute_mean, impute_median, impute_mode"
-            else:
-                suggestion = "Check that input is a valid ML feature engineering technique"
-        
-        return {"valid": is_valid, "suggestion": suggestion}
-        
-    except Exception as e:
-        logger.error(f"Error in fe_chat_check: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    valid_techniques = {
+        "standardization", "normalization", "log_transformation",
+        "label_encoding", "frequency_encoding", "target_encoding",
+        "impute_mean", "impute_median", "impute_mode",
+    }
+    
+    input_lower = input.lower().strip()
+    is_valid = input_lower in valid_techniques
+    
+    suggestion = ""
+    if not is_valid:
+        if "encod" in input_lower:
+            suggestion = "Try: label encoding, target encoding"
+        elif "imput" in input_lower:
+            suggestion = "Try: impute_mean, impute_median, impute_mode"
+        else:
+            suggestion = "Check that input is a valid ML technique"
+    
+    return {"valid": is_valid, "suggestion": suggestion}
 
 
 @router.get("/available_transformations")
 async def available_transformations() -> Dict[str, Any]:
-    """Get list of available transformations."""
     return {
         "status": "success",
         "categories": {
-            "numerical": ["standardization", "normalization", "log_transformation", "binning"],
-            "categorical": ["label_encoding", "frequency_encoding", "target_encoding"],
+            "numerical": ["standardization", "normalization", "log_transformation"],
+            "categorical": ["label_encoding", "frequency_encoding"],
             "missing_values": ["impute_mean", "impute_median", "impute_mode"],
-            "outliers": ["clip_outliers", "clip_iqr", "winsorize"]
         }
     }
