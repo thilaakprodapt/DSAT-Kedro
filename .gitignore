@@ -59,3 +59,11 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Environment variables
+.env
+.env.*
+
+# MLflow / model artifacts
+mlruns/
+models/
