@@ -23,6 +23,13 @@ from dsat.common.charts import (
     categorical_target_analysis,
 )
 
+from dsat.common.llm_utils import (
+    init_vertex_ai,
+    call_gemini,
+    parse_llm_json,
+    parse_llm_json_list,
+)
+
 __all__ = [
     # SQL Templates
     "SQLTemplateEngine",
@@ -41,4 +48,9 @@ __all__ = [
     "univariate_categorical",
     "numeric_target_analysis",
     "categorical_target_analysis",
+    # LLM Utils
+    "init_vertex_ai",
+    "call_gemini",
+    "parse_llm_json",
+    "parse_llm_json_list",
 ]

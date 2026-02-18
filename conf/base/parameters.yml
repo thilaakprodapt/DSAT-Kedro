@@ -18,3 +18,8 @@ fe:
   table_name: Employee
   target_dataset: DS_FE_Dataset
   target_column: LeaveOrNot
+
+llm:
+  model_name: gemini-2.0-flash
+  model_name_pro: gemini-2.5-pro
+  temperature: 0.2

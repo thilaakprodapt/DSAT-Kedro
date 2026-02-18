@@ -1,10 +1,38 @@
-# Data Catalog - DSAT
+# Catalog - DSAT
 # Documentation: https://docs.kedro.org/en/stable/data/data_catalog.html
 
-# Example BigQuery dataset (uncomment when ready to use)
-# raw_data:
-#   type: pandas.GBQDataSet
-#   project: cloud-practice-dev-2
-#   dataset: DS_FE_Dataset
-#   table_name: Employee
-#   credentials: gcp_credentials
+# ============================================================
+# EDA Pipeline Datasets
+# ============================================================
+
+eda_summary:
+  type: json.JSONDataset
+  filepath: data/02_intermediate/eda_summary.json
+
+column_types:
+  type: json.JSONDataset
+  filepath: data/02_intermediate/column_types.json
+
+data_overview:
+  type: json.JSONDataset
+  filepath: data/02_intermediate/data_overview.json
+
+missing_values:
+  type: json.JSONDataset
+  filepath: data/02_intermediate/missing_values.json
+
+outliers:
+  type: json.JSONDataset
+  filepath: data/02_intermediate/outliers.json
+
+cardinality:
+  type: json.JSONDataset
+  filepath: data/02_intermediate/cardinality.json
+
+# ============================================================
+# Feature Engineering Pipeline Datasets
+# ============================================================
+
+fe_recommendations:
+  type: json.JSONDataset
+  filepath: data/02_intermediate/fe_recommendations.json
